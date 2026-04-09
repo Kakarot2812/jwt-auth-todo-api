@@ -1,42 +1,47 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const {middleware} = require("./middleware")
+const {todoModel,userModel} = require("./model")
+
 const app = express();
 app.use(express.json())
 
-let todos_count = 1;
-let user_count = 1;
+//let todos_count = 1;
+//let user_count = 1;
 
-let USER = [];
-let TODOS = [];
 
-app.post("/signup", (req,res) => {
+app.post("/signup",async (req,res) => {
     const username = req.body.username;
     const password = req.body.password;
 
-    const userExists = USER.find(u => u.username === username);
-    if(userExists){
+    // const userExists = USER.find(u => u.username === username);
+    const existingUser = await userModel.findOne({
+        username: username,
+    })
+    if(existingUser){
         res.status(403).json({
             message: "User with this username already exists"
         })
         return;
     }
-
-    USER.push({
-        id: user_count++,
-        username,
-        password
+    const newUser = await userModel.create({
+        username: username,
+        password: password
     })
     res.json({
-        id: user_count - 1
+        id: newUser._id
     })
 })
 
-app.post("/signin", (req,res) => {
+app.post("/signin",async (req,res) => {
     const username = req.body.username;
     const password = req.body.password;
 
-    const userExists = USER.find(u => u.username === username && u.password === password);
+    //const userExists = USER.find(u => u.username === username && u.password === password);
+    const userExists = await userModel.findOne({
+        username: username,
+        password: password
+    });
     if(!userExists){
         res.status(403).json({
             message: "Incorrect credentials"
@@ -45,24 +50,24 @@ app.post("/signin", (req,res) => {
     }
 
     const token = jwt.sign({
-        userId: userExists.id
-    },"Nitesh123")
+        userId: userExists._id
+    },"Nitesh123");
+
     res.json({
         token
     })
 })
 
-app.post("/todo", middleware,(req,res) => {
+app.post("/todo", middleware,async (req,res) => {
    const userId = req.userId;
    const title = req.body.title;
    const description = req.body.description;
 
-   TODOS.push({
-    id: todos_count++,
-    title,
-    description,
-    userId
-   })
+   const newTodo = await todoModel.create({
+        title: title,
+        description: description,
+        userId: userId
+    })
 
    res.json({
     message: "Todo made"
@@ -70,14 +75,18 @@ app.post("/todo", middleware,(req,res) => {
    //console.log(req.headers);
 })
 
-app.delete("/todo/:todoId" ,middleware ,(req,res) => {
+app.delete("/todo/:todoId" ,middleware ,async(req,res) => {
     const userId = req.userId;
-    const todoId = parseInt(req.params.todoId);
+    const todoId = req.params.todoId;
 
-    const doesUserOwnTodo = TODOS.find(t => t.id === todoId && t.userId === userId );
+    //const doesUserOwnTodo = TODOS.find(t => t.id === todoId && t.userId === userId );
 
-    if(doesUserOwnTodo){
-        TODOS = TODOS.filter(t => t.id === todoId);
+    const deleted = await todoModel.findOneAndDelete({
+        _id: todoId,
+        userId: userId
+    })
+
+    if(deleted){
         res.json({
          message: "Deleted"
         })
@@ -89,9 +98,11 @@ app.delete("/todo/:todoId" ,middleware ,(req,res) => {
     }
 })
 
-app.get("/todos", middleware, (req,res) => {
+app.get("/todos", middleware,async (req,res) => {
     const userId = req.userId;
-    const userTodos = TODOS.filter(t => t.userId === userId);
+    const userTodos = await todoModel.find({
+      userId: userId
+    });
     res.json({
         todos: userTodos
     })
